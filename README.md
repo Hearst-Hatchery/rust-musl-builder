@@ -22,6 +22,20 @@ Binaries will be written to `target/$TARGET_ARCHITECTURE/release`. By default it
 
 With a bit of luck, you should be able to just copy your application binary from `target/x86_64-unknown-linux-musl/release`, and install it directly on any reasonably modern x86_64 Linux machine.  In particular, you should be able make static release binaries using TravisCI and GitHub, or you can copy your Rust application into an [Alpine Linux container][]. See below for details!
 
+## Caching builds
+
+You may be able to speed up build performance by adding the following `-v` commands to the `rust-musl-builder` alias:
+
+```
+-v cargo-git:/home/rust/.cargo/git -v cargo-registry:/home/rust/.cargo/registry
+```
+
+You will also need to fix the permissions on the mounted volumes:
+
+```sh
+rust-musl-builder sudo chown -R rust:rust /home/rust/.cargo/git /home/rust/.cargo/registry
+```
+
 ## How it works
 
 `rust-musl-builder` uses [musl-libc][], [musl-gcc][], and the new [rustup][] `target` support.  It includes static versions of several libraries:
@@ -30,13 +44,17 @@ With a bit of luck, you should be able to just copy your application binary from
 - OpenSSL, which is needed by many Rust applications.
 - `libpq`, which is needed for applications that use `diesel` with PostgreSQL. Note that this may be broken under Rust 1.21.0 and later (see https://github.com/emk/rust-musl-builder/issues/27).
 - `libz`, which is needed by `libpq`.
-
-You can also use the following libraries with a bit of setup:
-
-- SQLite3 with
-  `diesel`. See [examples/using-diesel](./examples/using-diesel/).
+- SQLite3. See [examples/using-diesel](./examples/using-diesel/).
 
 This library also sets up the environment variables needed to compile popular Rust crates using these libraries.
+
+## Extras
+
+This image also supports the following extra goodies:
+
+- Basic compilation for `armv7` using `musl-libc`. Not all libraries are supported at the moment, however.
+- [`mdbook`][mdbook] for building searchable HTML documentation from Markdown files. Build manuals to use alongside your `cargo doc` output!
+- [`cargo audit`][audit] to check your Rust project for known security issues.
 
 ## Making OpenSSL work
 
@@ -57,13 +75,19 @@ In addition to setting up OpenSSL, you'll need to add the following lines to you
 
 ```toml
 [dependencies]
-# This is needed to make sure that Cargo statically links against
-# `libssl`. This should happen automatically, but it doesn't.
-openssl-sys = "0.9"
+diesel = { version = "1", features = ["postgres", "sqlite"] }
 
-[patch.crates-io]
-# This is needed to handle cross-compilation of libpq.
-pq-sys = { git = 'https://github.com/golddranks/pq-sys' }
+# Needed for sqlite.
+libsqlite3-sys = { version = "*", features = ["bundled"] }
+
+# Needed for Postgres.
+openssl = "*"
+```
+
+For PostgreSQL, you'll also need to include `openssl` in your `main.rs` (in order to avoid linker errors):
+
+```toml
+extern crate openssl;
 ```
 
 See [this PR](https://github.com/sgrif/pq-sys/pull/18) for a discussion of the issues involved in cross-compiling `diesel` and `diesel_codegen`.
@@ -152,6 +176,8 @@ Either the [Apache 2.0 license](./LICENSE-APACHE.txt), or the
 [MIT license](./LICENSE-MIT.txt).
 
 [Alpine Linux container]: https://hub.docker.com/_/alpine/
+[audit]: https://github.com/RustSec/cargo-audit
+[mdbook]: https://github.com/rust-lang-nursery/mdBook
 [musl-libc]: http://www.musl-libc.org/
 [musl-gcc]: http://www.musl-libc.org/how.html
 [rustup]: https://www.rustup.rs/

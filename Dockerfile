@@ -12,6 +12,8 @@ ARG TOOLCHAIN=stable
 # We also set up a `rust` user by default, in whose account we'll install
 # the Rust toolchain.  This user has sudo privileges if you need to install
 # any more software.
+#
+# `mdbook` is the standard Rust tool for making searchable HTML manuals.
 RUN apt-get update && \
     apt-get install -y \
         build-essential \
@@ -30,7 +32,12 @@ RUN apt-get update && \
         gcc-4.7-multilib-arm-linux-gnueabihf \
         && \
     apt-get clean && rm -rf /var/lib/apt/lists/* && \
-    useradd rust --user-group --create-home --shell /bin/bash --groups sudo
+    useradd rust --user-group --create-home --shell /bin/bash --groups sudo && \
+    MDBOOK_VERSION=0.1.5 && \
+    curl -LO https://github.com/rust-lang-nursery/mdBook/releases/download/v$MDBOOK_VERSION/mdbook-v$MDBOOK_VERSION-x86_64-unknown-linux-musl.tar.gz && \
+    tar xf mdbook-v$MDBOOK_VERSION-x86_64-unknown-linux-musl.tar.gz && \
+    mv mdbook /usr/local/bin/ && \
+    rm -f mdbook-v$MDBOOK_VERSION-x86_64-unknown-linux-musl.tar.gz
 
 # Allow sudo without a password.
 ADD sudoers /etc/sudoers.d/nopasswd
@@ -64,7 +71,7 @@ RUN git config --global credential.https://github.com.helper ghtoken
 # needed by the popular Rust `hyper` crate.
 RUN echo "Building OpenSSL" && \
     cd /tmp && \
-    OPENSSL_VERSION=1.0.2l && \
+    OPENSSL_VERSION=1.0.2o && \
     curl -LO "https://www.openssl.org/source/openssl-$OPENSSL_VERSION.tar.gz" && \
     tar xvzf "openssl-$OPENSSL_VERSION.tar.gz" && cd "openssl-$OPENSSL_VERSION" && \
     env CC=musl-gcc ./Configure no-shared no-zlib -fPIC --prefix=/usr/local/musl linux-x86_64 && \
@@ -81,7 +88,7 @@ RUN echo "Building OpenSSL" && \
     \
     echo "Building libpq" && \
     cd /tmp && \
-    POSTGRESQL_VERSION=9.6.5 && \
+    POSTGRESQL_VERSION=9.6.8 && \
     curl -LO "https://ftp.postgresql.org/pub/source/v$POSTGRESQL_VERSION/postgresql-$POSTGRESQL_VERSION.tar.gz" && \
     tar xzf "postgresql-$POSTGRESQL_VERSION.tar.gz" && cd "postgresql-$POSTGRESQL_VERSION" && \
     CC=musl-gcc CPPFLAGS=-I/usr/local/musl/include LDFLAGS=-L/usr/local/musl/lib ./configure --with-openssl --without-readline --prefix=/usr/local/musl && \
@@ -105,6 +112,10 @@ ENV OPENSSL_DIR=/usr/local/musl/ \
 # (Please feel free to submit pull requests for musl-libc builds of other C
 # libraries needed by the most popular and common Rust crates, to avoid
 # everybody needing to build them manually.)
+
+# Install some useful Rust tools from source. This will use the static linking
+# toolchain, but that should be OK.
+RUN cargo install -f cargo-audit
 
 # Expect our source code to live in /home/rust/src.  We'll run the build as
 # user `rust`, which will be uid 1000, gid 1000 outside the container.
